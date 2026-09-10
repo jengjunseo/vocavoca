@@ -158,6 +158,35 @@ export function buildMatchingPuzzle(deck: Deck, items: AssessmentItem[]) {
 function seededShuffle<T>(values: T[], seed: number) { const output = [...values]; let state = seed >>> 0; for (let i = output.length - 1; i > 0; i--) { state = (state * 1664525 + 1013904223) >>> 0; const j = state % (i + 1); [output[i], output[j]] = [output[j], output[i]]; } return output; }
 function takeRepeated<T>(pool: T[], count: number, key: (value: T) => string) { if (!pool.length) return []; const output: T[] = []; for (let i = 0; i < count && i < pool.length * 2; i++) output.push(pool[i % pool.length]); return output.filter((value, index) => index === 0 || key(value) !== key(output[index - 1])); }
 
+/**
+ * Full performance run: one direct-typing question per card, shuffled each run.
+ * Prefer a blank item, then rival/recall/first explicit item. Rival items are
+ * intentionally rendered as blanks here so the full 154-card drill never
+ * falls back to multiple choice. Card-level acceptedAnswers are NOT merged
+ * into these questions because they usually contain Korean meaning aliases,
+ * which must not be accepted as answers to English sentence blanks.
+ */
+export function buildFullAssessmentSession(deck: Deck, seed = 7) {
+  const questions = deck.cards.flatMap((card) => {
+    const items = card.assessment?.items ?? [];
+    const item = items.find((candidate) => candidate.type === "blank") ?? items.find((candidate) => candidate.type === "rival") ?? items.find((candidate) => candidate.type === "recall") ?? items[0];
+    if (!item) return [];
+    return [{
+      id: `${item.id}-full-typing`,
+      itemId: item.id,
+      type: "blank" as const,
+      cardId: card.id,
+      prompt: item.prompt,
+      answer: item.answer,
+      acceptedAnswers: [...item.acceptedAnswers ?? []],
+      anchors: item.anchors ? [...item.anchors] : card.assessment?.anchors ? [...card.assessment.anchors] : deck.assessment?.anchors ? [...deck.assessment.anchors] : undefined,
+      rule: item.rule,
+      confusionGroupId: item.confusionGroupId,
+    } satisfies AssessmentQuestion];
+  });
+  return seededShuffle(questions, seed);
+}
+
 export function buildAssessmentSession(deck: Deck, events: StudyEvent[], seed = 7, targetCount = 30) {
   const items = weakAssessmentItems(deck, events);
   const recallPool = items.filter((item) => item.type === "recall" || item.type === "blank").map((item) => item.type === "blank" ? buildBlankQuestion(deck, item) : buildRecallQuestion(deck, item));
