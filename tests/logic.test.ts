@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerIsCorrect, assessmentAnswerIsCorrect, buildAssessmentSession, buildMatchingPuzzle, buildRivalQuestion, makeDeck, nextSchedule, quizChoices, reviewQueue, updateMastery, validateImport, weakAssessmentItems, wrongAssessmentItems, uncertainAssessmentItems } from "../lib/logic";
+import { answerIsCorrect, assessmentAnswerIsCorrect, buildAssessmentSession, buildFullAssessmentSession, buildMatchingPuzzle, buildRivalQuestion, makeDeck, nextSchedule, quizChoices, reviewQueue, updateMastery, validateImport, weakAssessmentItems, wrongAssessmentItems, uncertainAssessmentItems } from "../lib/logic";
 
 const input = { version: 1 as const, title: "테스트", cards: [{ term: "tweak", meanings: ["살짝 조정하다"], acceptedAnswers: ["조금 수정하다"] }, { term: "inactive", meanings: ["활동하지 않는"] }, { term: "retain", meanings: ["유지하다"] }, { term: "coherent", meanings: ["일관성 있는"] }] };
 
@@ -87,6 +87,32 @@ describe("assessment mode", () => {
     expect(counts.rival).toBeGreaterThanOrEqual(Math.floor(queue.length * 0.2));
     expect(counts.match).toBeGreaterThanOrEqual(Math.floor(queue.length * 0.1));
     expect(queue.every((question, index) => index === 0 || question.itemId !== queue[index - 1].itemId)).toBe(true);
+  });
+  it("builds all 154 cards as one randomized direct-typing run", () => {
+    const source = {
+      version: 1 as const,
+      title: "154 typing fixture",
+      cards: Array.from({ length: 154 }, (_, index) => ({
+        id: `card-${index + 1}`,
+        term: `term-${index + 1}`,
+        meanings: [`meaning-${index + 1}`],
+        acceptedAnswers: [`뜻-${index + 1}`],
+        assessment: { items: [{ id: `item-${index + 1}`, type: "blank" as const, prompt: `Sentence ${index + 1} ___ .`, answer: `answer-${index + 1}`, acceptedAnswers: [`answer-${index + 1}`] }] },
+      })),
+    };
+    const result = validateImport(source);
+    if (!result.ok) throw new Error(result.error);
+    const deck = makeDeck(result.value);
+    const first = buildFullAssessmentSession(deck, 101);
+    const sameSeed = buildFullAssessmentSession(deck, 101);
+    const otherSeed = buildFullAssessmentSession(deck, 202);
+    expect(first).toHaveLength(154);
+    expect(new Set(first.map((question) => question.itemId)).size).toBe(154);
+    expect(first.every((question) => question.type === "blank")).toBe(true);
+    expect(first.map((question) => question.itemId)).toEqual(sameSeed.map((question) => question.itemId));
+    expect(first.map((question) => question.itemId)).not.toEqual(otherSeed.map((question) => question.itemId));
+    expect(first.some((question) => question.acceptedAnswers.some((answer) => answer.startsWith("뜻-")))).toBe(false);
+    expect(buildAssessmentSession(deck, [], 303, 154)).toHaveLength(154);
   });
   it("checks blank, rival and accepted form answers strictly", () => {
     const result = validateImport(assessmentInput);
