@@ -1,0 +1,52 @@
+name: Apply form drill patch
+
+on:
+  push:
+    branches:
+      - form-drill-patch
+    paths:
+      - scripts/apply-form-drill-patch.mjs
+      - .github/workflows/apply-form-drill-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: form-drill-patch
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply patch
+        run: node scripts/apply-form-drill-patch.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit verified patch
+        run: |
+          if git diff --quiet -- app/page.tsx lib/logic.ts tests/logic.test.ts; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx lib/logic.ts tests/logic.test.ts
+          git commit -m "Add morphology-only adaptive drill mode"
+          git push origin HEAD:form-drill-patch
