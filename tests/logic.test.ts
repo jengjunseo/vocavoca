@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerIsCorrect, assessmentAnswerIsCorrect, buildAssessmentSession, buildFullAssessmentSession, buildMatchingPuzzle, buildRivalQuestion, makeDeck, nextSchedule, quizChoices, reviewQueue, updateMastery, validateImport, weakAssessmentItems, wrongAssessmentItems, uncertainAssessmentItems } from "../lib/logic";
+import { answerIsCorrect, assessmentAnswerIsCorrect, buildAssessmentSession, buildFormAssessmentSession, buildFullAssessmentSession, buildMatchingPuzzle, buildRivalQuestion, formAssessmentItems, makeDeck, nextSchedule, quizChoices, reviewQueue, updateMastery, validateImport, weakAssessmentItems, wrongAssessmentItems, uncertainAssessmentItems } from "../lib/logic";
 
 const input = { version: 1 as const, title: "테스트", cards: [{ term: "tweak", meanings: ["살짝 조정하다"], acceptedAnswers: ["조금 수정하다"] }, { term: "inactive", meanings: ["활동하지 않는"] }, { term: "retain", meanings: ["유지하다"] }, { term: "coherent", meanings: ["일관성 있는"] }] };
 
@@ -144,5 +144,39 @@ describe("assessment mode", () => {
     expect(uncertainAssessmentItems(deck, [held]).map((item) => item.id)).toEqual(["rival-2-item"]);
     expect(weakAssessmentItems(deck, [wrong], now)[0].id).toBe("rival-1-item");
     expect(updateMastery(50, false, false, 5000)).toBe(30);
+  });
+});
+
+
+describe("form-change drill", () => {
+  it("uses only items whose required answer differs from the provided base term", () => {
+    const result = validateImport(assessmentInput);
+    if (!result.ok) throw new Error(result.error);
+    const deck = makeDeck(result.value);
+    expect(formAssessmentItems(deck).map((item) => item.id).sort()).toEqual(["blank-1-item", "rival-1-item"]);
+  });
+
+  it("builds the entire morphology queue as strict direct typing with the base term exposed", () => {
+    const result = validateImport(assessmentInput);
+    if (!result.ok) throw new Error(result.error);
+    const deck = makeDeck(result.value);
+    const first = buildFormAssessmentSession(deck, 17);
+    const second = buildFormAssessmentSession(deck, 17);
+    expect(first).toHaveLength(2);
+    expect(first.map((question) => question.itemId)).toEqual(second.map((question) => question.itemId));
+    expect(first.every((question) => question.type === "blank" && Boolean(question.baseTerm))).toBe(true);
+    expect(new Set(first.map((question) => question.itemId)).size).toBe(first.length);
+  });
+
+  it("accepts the requested inflected form but not the base word or Korean meaning alias", () => {
+    const result = validateImport(assessmentInput);
+    if (!result.ok) throw new Error(result.error);
+    const deck = makeDeck(result.value);
+    const question = buildFormAssessmentSession(deck, 17).find((candidate) => candidate.itemId === "blank-1-item");
+    if (!question) throw new Error("missing form question");
+    expect(question.baseTerm).toBe("compel");
+    expect(assessmentAnswerIsCorrect(question, "compelled")).toBe(true);
+    expect(assessmentAnswerIsCorrect(question, "compel")).toBe(false);
+    expect(assessmentAnswerIsCorrect(question, "강요하다")).toBe(false);
   });
 });

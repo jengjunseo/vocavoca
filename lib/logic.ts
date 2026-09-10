@@ -95,6 +95,7 @@ export type AssessmentQuestion = {
   prompt: string;
   answer: string;
   acceptedAnswers: string[];
+  baseTerm?: string;
   anchors?: string[];
   rule?: string;
   confusionGroupId?: string;
@@ -124,6 +125,14 @@ export function assessmentPriority(item: AssessmentItem, events: StudyEvent[], n
 export function weakAssessmentItems(deck: Deck, events: StudyEvent[], now = new Date()) { return assessmentItems(deck).sort((a, b) => assessmentPriority(b, events, now) - assessmentPriority(a, events, now)); }
 export function wrongAssessmentItems(deck: Deck, events: StudyEvent[]) { const ids = new Set(events.filter((event) => event.kind === "assessment" && event.correct === false).map((event) => event.assessmentItemId)); return assessmentItems(deck).filter((item) => ids.has(item.id)); }
 export function uncertainAssessmentItems(deck: Deck, events: StudyEvent[]) { const ids = new Set(events.filter((event) => event.kind === "assessment" && event.uncertain).map((event) => event.assessmentItemId)); return assessmentItems(deck).filter((item) => ids.has(item.id)); }
+
+export function formAssessmentItems(deck: Deck) {
+  return assessmentItems(deck).filter((item) => {
+    if (item.type === "match") return false;
+    const card = itemCard(deck, item);
+    return Boolean(card?.term) && normalizeAnswer(item.answer) !== normalizeAnswer(card.term);
+  });
+}
 
 function questionFromItem(deck: Deck, item: AssessmentItem, type: AssessmentItemType): AssessmentQuestion {
   const card = itemCard(deck, item);
@@ -202,6 +211,21 @@ export function buildAssessmentSession(deck: Deck, events: StudyEvent[], seed = 
   const shuffled = seededShuffle(queue, seed);
   for (let i = 1; i < shuffled.length; i++) if (shuffled[i].itemId === shuffled[i - 1].itemId && shuffled.length > 1) { const swap = (i + 1) % shuffled.length; [shuffled[i], shuffled[swap]] = [shuffled[swap], shuffled[i]]; }
   return shuffled;
+}
+
+export function buildFormAssessmentSession(deck: Deck, seed = 7) {
+  const questions = formAssessmentItems(deck).map((item) => {
+    const card = itemCard(deck, item);
+    const question = questionFromItem(deck, item, "blank");
+    return {
+      ...question,
+      id: `${item.id}-form`,
+      type: "blank" as const,
+      baseTerm: card?.term ?? "",
+      acceptedAnswers: [...(item.acceptedAnswers ?? [])],
+    };
+  });
+  return seededShuffle(questions, seed);
 }
 
 export function assessmentAnswerIsCorrect(question: AssessmentQuestion, answer: string) { const normalized = normalizeAnswer(answer); return Boolean(normalized) && [question.answer, ...question.acceptedAnswers].some((candidate) => normalizeAnswer(candidate) === normalized); }
